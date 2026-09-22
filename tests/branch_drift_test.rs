@@ -14,12 +14,16 @@
 use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
-use tokensave::tokensave::TokenSave;
+use tokensave::tokensave::{BranchAttachment, BranchDrift, TokenSave};
 
 fn git(root: &Path, args: &[&str]) {
     let out = Command::new("git")
         .args(args)
         .current_dir(root)
+        .env("XDG_CONFIG_HOME", root.join(".xdg-config"))
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_AUTHOR_NAME", "TokenSave Test")
         .env("GIT_AUTHOR_EMAIL", "tokensave@example.com")
         .env("GIT_COMMITTER_NAME", "TokenSave Test")
@@ -89,6 +93,13 @@ async fn a_checkout_under_a_live_handle_is_detected_as_drift() {
         .expect("a checkout under a live handle must be detected");
     assert_eq!(drift.serving, "master");
     assert_eq!(drift.working_tree, "feature");
+    assert_eq!(
+        cg.branch_attachment(),
+        BranchAttachment::TrackedMismatch(BranchDrift {
+            serving: "master".to_string(),
+            working_tree: "feature".to_string(),
+        })
+    );
 }
 
 /// The guard that actually prevents the corruption: with drift present, the
@@ -124,6 +135,43 @@ async fn an_automatic_sync_refuses_while_the_branch_has_drifted() {
     assert!(
         !indexed.iter().any(|p| p.contains("on_feature")),
         "master's index must not contain a file that exists only on feature: {indexed:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_explicit_sync_refuses_while_the_branch_has_drifted() {
+    let (tmp, cg) = project_on_master_with_tracked_feature().await;
+    git(tmp.path(), &["checkout", "feature"]);
+    std::fs::write(tmp.path().join("on_feature.rs"), "fn on_feature() {}").unwrap();
+
+    let error = cg
+        .sync()
+        .await
+        .expect_err("explicit sync must refuse tracked branch drift")
+        .to_string();
+    assert!(error.contains("master"), "serving branch missing: {error}");
+    assert!(error.contains("feature"), "working branch missing: {error}");
+    assert!(
+        error.contains("tokensave_reopen"),
+        "recovery tool missing: {error}"
+    );
+}
+
+#[tokio::test]
+async fn an_explicit_full_index_refuses_while_the_branch_has_drifted() {
+    let (tmp, cg) = project_on_master_with_tracked_feature().await;
+    git(tmp.path(), &["checkout", "feature"]);
+    std::fs::write(tmp.path().join("on_feature.rs"), "fn on_feature() {}").unwrap();
+
+    let error = match cg.index_all().await {
+        Ok(_) => panic!("full index must refuse tracked branch drift"),
+        Err(error) => error.to_string(),
+    };
+    assert!(error.contains("master"), "serving branch missing: {error}");
+    assert!(error.contains("feature"), "working branch missing: {error}");
+    assert!(
+        error.contains("tokensave_reopen"),
+        "recovery tool missing: {error}"
     );
 }
 

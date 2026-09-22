@@ -38,6 +38,17 @@ pub enum AutoSyncScope {
     /// the one this handle resolved. Syncing would write the new branch's
     /// files into the old branch's database. See [`BranchDrift`].
     BranchDrifted(BranchDrift),
+    /// The working tree is on an untracked branch while per-branch databases
+    /// exist. Syncing would write the untracked tree into a fallback branch's
+    /// database.
+    UntrackedBranch {
+        /// The branch whose database this handle currently serves.
+        serving: String,
+        /// The untracked branch checked out in the working tree.
+        working_tree: String,
+        /// The tracked branch whose database a fresh open would fall back to.
+        fallback: String,
+    },
 }
 
 /// A handle resolved to one branch while the working tree sits on another.
@@ -60,6 +71,24 @@ pub struct BranchDrift {
     pub serving: String,
     /// The branch the working tree is actually on now.
     pub working_tree: String,
+}
+
+/// The relationship between a live handle, the working tree, and branch DBs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BranchAttachment {
+    /// The working tree still matches the branch served by this handle.
+    Current,
+    /// No non-default branch database exists, so branch names intentionally
+    /// share the project's single database.
+    SharedSingleDatabase { working_tree: String },
+    /// The working tree moved to another branch that has its own database.
+    TrackedMismatch(BranchDrift),
+    /// The working tree moved to an untracked branch in multi-database mode.
+    Untracked {
+        serving: String,
+        working_tree: String,
+        fallback: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -195,44 +224,12 @@ impl TokenSave {
         stale
     }
 
-    /// Detects a working tree that has moved to a different branch than this
-    /// handle resolved, which makes every write cross-branch (#400).
-    ///
-    /// Returns `None` in single-DB mode (no branch metadata), on a detached
-    /// HEAD or outside a git repo (no branch to compare), and — the common
-    /// case — when the tree is still on the branch being served.
-    ///
-    /// Cheap enough for the per-`tools/call` path: one `current_branch`
-    /// lookup, which prefers `gix` over spawning git, and one small JSON
-    /// read that only happens for projects in multi-branch mode.
+    /// Compatibility adapter for callers that only understand tracked drift.
     pub fn branch_drift(&self) -> Option<BranchDrift> {
-        let meta = branch_meta::load_branch_meta(&get_tokensave_dir(&self.project_root))?;
-
-        let serving = self
-            .serving_branch
-            .as_ref()
-            .or(self.active_branch.as_ref())?;
-        let working_tree = branch::current_branch(&self.project_root)?;
-        if working_tree == *serving {
-            return None;
+        match self.branch_attachment() {
+            BranchAttachment::TrackedMismatch(drift) => Some(drift),
+            _ => None,
         }
-
-        // A differing name is not yet a problem: what matters is whether the
-        // working tree's branch has a database of its own. `init` writes
-        // branch metadata for the default branch alone, so metadata exists
-        // even in single-DB mode — an untracked branch there is served by the
-        // same top-level `tokensave.db` and syncing it is correct. Mirrors
-        // the ownership rule in `branch::track_branch_copy`: the default
-        // branch is the top-level DB, tracked branches get their own.
-        let working_tree_has_own_db =
-            meta.is_tracked(&working_tree) || working_tree == meta.default_branch;
-        if !working_tree_has_own_db {
-            return None;
-        }
-        Some(BranchDrift {
-            serving: serving.clone(),
-            working_tree,
-        })
     }
 
     /// [`Self::find_stale_files`] with the bounds an *automatic* sync must
@@ -257,8 +254,22 @@ impl TokenSave {
     ///    materialises the whole node graph at once (#306) that cost is
     ///    graph-proportional. A limit of `0` disables this third guard.
     pub async fn find_stale_files_bounded(&self) -> AutoSyncScope {
-        if let Some(drift) = self.branch_drift() {
-            return AutoSyncScope::BranchDrifted(drift);
+        match self.branch_attachment() {
+            BranchAttachment::TrackedMismatch(drift) => {
+                return AutoSyncScope::BranchDrifted(drift);
+            }
+            BranchAttachment::Untracked {
+                serving,
+                working_tree,
+                fallback,
+            } => {
+                return AutoSyncScope::UntrackedBranch {
+                    serving,
+                    working_tree,
+                    fallback,
+                };
+            }
+            BranchAttachment::Current | BranchAttachment::SharedSingleDatabase { .. } => {}
         }
 
         // Checked before the walk: when the index is empty there is nothing

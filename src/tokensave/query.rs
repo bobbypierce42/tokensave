@@ -800,6 +800,76 @@ impl TokenSave {
         &self.project_root
     }
 
+    /// Classifies this handle's attachment to the live working-tree branch.
+    pub fn branch_attachment(&self) -> BranchAttachment {
+        let Some(working_tree) = branch::current_branch(&self.project_root) else {
+            return BranchAttachment::Current;
+        };
+        let serving = self
+            .serving_branch
+            .as_ref()
+            .or(self.active_branch.as_ref())
+            .cloned()
+            .unwrap_or_else(|| working_tree.clone());
+
+        if working_tree == serving {
+            return BranchAttachment::Current;
+        }
+
+        let tokensave_dir = get_tokensave_dir(&self.project_root);
+        let Some(meta) = branch_meta::load_branch_meta(&tokensave_dir) else {
+            return BranchAttachment::SharedSingleDatabase { working_tree };
+        };
+        let has_non_default_database = meta
+            .branches
+            .keys()
+            .any(|branch| branch != &meta.default_branch);
+        if !has_non_default_database {
+            return BranchAttachment::SharedSingleDatabase { working_tree };
+        }
+
+        if meta.is_tracked(&working_tree) {
+            return BranchAttachment::TrackedMismatch(BranchDrift {
+                serving,
+                working_tree,
+            });
+        }
+
+        let (_, fallback, _) =
+            Self::resolve_db_for_branch(&self.project_root, &tokensave_dir, Some(&working_tree));
+        BranchAttachment::Untracked {
+            serving,
+            working_tree,
+            fallback: fallback.unwrap_or(meta.default_branch),
+        }
+    }
+
+    /// Refuses writes when the live working tree does not own this handle's DB.
+    pub(crate) fn ensure_branch_write_safe(&self) -> Result<()> {
+        let message = match self.branch_attachment() {
+            BranchAttachment::TrackedMismatch(drift) => format!(
+                "working tree branch '{}' does not match the branch '{}' served by this handle; \
+                 refusing to write into another branch's database. Call tokensave_reopen to \
+                 reconnect in-session before syncing or indexing.",
+                drift.working_tree, drift.serving
+            ),
+            BranchAttachment::Untracked {
+                serving,
+                working_tree,
+                fallback,
+            } => format!(
+                "branch '{working_tree}' is untracked while serving '{serving}' from fallback \
+                 branch '{fallback}'; refusing to write into another branch's database. \
+                 Call tokensave_reopen with track_if_missing=true to create this branch index \
+                 and reconnect in-session."
+            ),
+            BranchAttachment::Current | BranchAttachment::SharedSingleDatabase { .. } => {
+                return Ok(());
+            }
+        };
+        Err(TokenSaveError::Config { message })
+    }
+
     /// Whether per-call savings should be surfaced to the agent (#356).
     ///
     /// Resolves `report_savings` from the project config, letting the
