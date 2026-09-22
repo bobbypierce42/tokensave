@@ -316,6 +316,7 @@ impl TokenSave {
         F: Fn(usize, usize, &str),
         V: Fn(&str),
     {
+        self.ensure_branch_write_safe()?;
         debug_assert!(self.project_root.exists(), "project root does not exist");
         debug_assert!(
             self.project_root.is_dir(),
@@ -613,6 +614,7 @@ impl TokenSave {
         if stale_files.is_empty() {
             return Ok(false);
         }
+        self.ensure_branch_write_safe()?;
         // Normalize once at the entry; downstream helpers can rely on
         // forward-slash form matching the walker's canonical path
         // (defends against #87 — Windows duplicate-row corruption).
@@ -788,6 +790,7 @@ impl TokenSave {
         if stale_files.is_empty() {
             return Ok(());
         }
+        self.ensure_branch_write_safe()?;
         // Normalize once at the entry — see `sync_if_stale` and #87.
         let stale_files = normalize_rel_paths(stale_files);
 
@@ -834,6 +837,7 @@ impl TokenSave {
     pub(crate) async fn sync_single_files(&self, file_paths: &[String]) -> Result<()> {
         use crate::sync as sync_mod;
 
+        self.ensure_branch_write_safe()?;
         let start = Instant::now();
         let project_root = &self.project_root;
         let registry = &self.registry;
@@ -1018,6 +1022,7 @@ impl TokenSave {
         F: Fn(usize, usize, &str),
         V: Fn(&str),
     {
+        self.ensure_branch_write_safe()?;
         debug_assert!(
             self.project_root.exists(),
             "sync: project root does not exist"

@@ -13,7 +13,7 @@
 //! *decision*, not on wall-clock or memory, so they stay deterministic.
 
 use tempfile::tempdir;
-use tokensave::tokensave::{AutoSyncScope, TokenSave};
+use tokensave::tokensave::{AutoSyncScope, BranchAttachment, TokenSave};
 
 /// Writes `n` trivial Rust files into `dir`.
 fn write_files(dir: &std::path::Path, n: usize) {
@@ -71,6 +71,7 @@ async fn an_ordinary_change_still_syncs_automatically() {
     // be timing-dependent. A file with no DB record is stale unconditionally.
     std::fs::write(project.join("added.rs"), "fn added() {}").unwrap();
 
+    assert_eq!(cg.branch_attachment(), BranchAttachment::Current);
     match cg.find_stale_files_bounded().await {
         AutoSyncScope::Sync(files) => {
             assert_eq!(files, vec!["added.rs".to_string()]);

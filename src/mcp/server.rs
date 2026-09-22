@@ -527,6 +527,15 @@ fn auto_sync_refusal(scope: &crate::tokensave::AutoSyncScope) -> String {
              '{}'s index. Restart the MCP server to pick up the branch (#400).",
             drift.serving, drift.working_tree, drift.working_tree, drift.serving
         ),
+        crate::tokensave::AutoSyncScope::UntrackedBranch {
+            serving,
+            working_tree,
+            fallback,
+        } => format!(
+            "skipping automatic sync: branch '{working_tree}' is untracked while \
+             this server is serving '{serving}' from fallback branch '{fallback}'. \
+             Call tokensave_reopen with track_if_missing=true before syncing."
+        ),
         crate::tokensave::AutoSyncScope::TooManyStale { count, limit } => format!(
             "skipping automatic sync: {count} files are stale, over the \
              {limit}-file limit for a background sync. Run `tokensave sync` to \
