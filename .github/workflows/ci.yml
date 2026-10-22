@@ -21,7 +21,7 @@ env:
 jobs:
   test:
     name: Test ${{ matrix.name }}
-    runs-on: ${{ matrix.runner == 'ubuntu-latest' && 'kalana-ci' || matrix.runner == 'macos-14' && 'kalana-macos-ci' || matrix.runner }}
+    runs-on: ${{ matrix.runner == 'ubuntu-latest' && 'kalana-ci' || matrix.runner == 'macos-14' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'macos-26' || 'kalana-macos-ci') || matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
