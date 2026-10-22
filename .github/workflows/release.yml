@@ -30,7 +30,7 @@ jobs:
   setup:
     name: Resolve target tag
     if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
-    runs-on: [self-hosted, kalana-ci, Linux]
+    runs-on: kalana-ci
     timeout-minutes: 90
     outputs:
       # The tag every downstream job builds and uploads against. On a release event this is
@@ -91,7 +91,7 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     needs: setup
-    runs-on: ${{ startsWith(matrix.runner, 'windows') && matrix.runner || startsWith(matrix.runner, 'macos') && fromJSON('["self-hosted","kalana-macos-ci","macOS"]') || fromJSON('["self-hosted","kalana-ci","Linux"]') }}
+    runs-on: ${{ startsWith(matrix.runner, 'windows') && matrix.runner || startsWith(matrix.runner, 'macos') && fromJSON('["self-hosted","kalana-macos-ci","macOS"]') || fromJSON('["kalana-ci"]') }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -270,7 +270,7 @@ jobs:
     name: Sign Windows binary (${{ matrix.name }})
     if: always() && needs.setup.result == 'success' && needs.setup.outputs.publish == 'true'
     needs: [setup, build]
-    runs-on: [self-hosted, kalana-ci, Linux]
+    runs-on: kalana-ci
     timeout-minutes: 90
     permissions:
       contents: write   # upload the signed zip to the release
@@ -372,7 +372,7 @@ jobs:
     name: Publish SHA256SUMS
     if: always() && needs.setup.outputs.publish == 'true' && needs.sign-windows.result == 'success'
     needs: [setup, build, sign-windows]
-    runs-on: [self-hosted, kalana-ci, Linux]
+    runs-on: kalana-ci
     timeout-minutes: 90
     steps:
       - name: Set up GitHub CLI without root privileges
@@ -451,7 +451,7 @@ jobs:
       github.event_name == 'release' && !github.event.release.prerelease
       && !cancelled() && needs.build.result == 'success'
     needs: build
-    runs-on: [self-hosted, kalana-ci, Linux]
+    runs-on: kalana-ci
     timeout-minutes: 90
     steps:
       - name: Limit self-hosted compilation parallelism
@@ -571,7 +571,7 @@ jobs:
     name: Publish to crates.io
     if: github.event_name == 'release' && !github.event.release.prerelease
     needs: build
-    runs-on: [self-hosted, kalana-ci, Linux]
+    runs-on: kalana-ci
     timeout-minutes: 90
     steps:
       - name: Limit self-hosted compilation parallelism
@@ -594,7 +594,7 @@ jobs:
     if: always() && needs.sign-windows.result == 'success'
     # Depends on sign-windows: it downloads the signed Windows zip from the release to hash it.
     needs: [setup, sign-windows]
-    runs-on: [self-hosted, kalana-ci, Linux]
+    runs-on: kalana-ci
     timeout-minutes: 90
     steps:
       - name: Set up GitHub CLI without root privileges

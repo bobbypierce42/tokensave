@@ -1,6 +1,6 @@
 # CI
 
-Linux checks and release coordination use `[self-hosted, kalana-ci, Linux]`.
+Linux checks and release coordination use `kalana-ci`.
 macOS jobs use `[self-hosted, kalana-macos-ci, macOS]`. Windows x64 and ARM64 jobs
 keep their original GitHub-hosted Windows runners, as explicitly requested by the
 repository owner because no self-hosted Windows runner is available.

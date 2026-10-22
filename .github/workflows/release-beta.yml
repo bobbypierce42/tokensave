@@ -30,7 +30,7 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     if: vars.BETA_CHANNEL_ENABLED == 'true' && github.event.release.prerelease
-    runs-on: ${{ startsWith(matrix.runner, 'windows') && matrix.runner || startsWith(matrix.runner, 'macos') && fromJSON('["self-hosted","kalana-macos-ci","macOS"]') || fromJSON('["self-hosted","kalana-ci","Linux"]') }}
+    runs-on: ${{ startsWith(matrix.runner, 'windows') && matrix.runner || startsWith(matrix.runner, 'macos') && fromJSON('["self-hosted","kalana-macos-ci","macOS"]') || fromJSON('["kalana-ci"]') }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -178,7 +178,7 @@ jobs:
     name: Publish SHA256SUMS
     if: vars.BETA_CHANNEL_ENABLED == 'true' && github.event.release.prerelease
     needs: build
-    runs-on: [self-hosted, kalana-ci, Linux]
+    runs-on: kalana-ci
     timeout-minutes: 90
     steps:
       - name: Set up GitHub CLI without root privileges
@@ -234,7 +234,7 @@ jobs:
       vars.BETA_CHANNEL_ENABLED == 'true' && github.event.release.prerelease
       && !cancelled() && needs.build.result == 'success'
     needs: build
-    runs-on: [self-hosted, kalana-ci, Linux]
+    runs-on: kalana-ci
     timeout-minutes: 90
     steps:
       - name: Limit self-hosted compilation parallelism
@@ -356,7 +356,7 @@ jobs:
     name: Update Scoop bucket (beta)
     if: vars.BETA_CHANNEL_ENABLED == 'true' && github.event.release.prerelease && !cancelled()
     needs: build
-    runs-on: [self-hosted, kalana-ci, Linux]
+    runs-on: kalana-ci
     timeout-minutes: 90
     steps:
       - name: Set up GitHub CLI without root privileges
