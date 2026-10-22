@@ -67,6 +67,12 @@ jobs:
           echo "CARGO_BUILD_JOBS=2" >> "$GITHUB_ENV"
           echo "RUST_TEST_THREADS=2" >> "$GITHUB_ENV"
           if [ "$RUNNER_OS" = macOS ]; then echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "$GITHUB_ENV"; fi
+      - name: Prepare a private home for the Mac job
+        if: runner.os == 'macOS' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          mkdir -p "$RUNNER_TEMP/ci-home"
+          echo "HOME=$RUNNER_TEMP/ci-home" >> "$GITHUB_ENV"
       - name: Install GitHub CLI in the Mac job directory
         if: runner.os == 'macOS' && runner.environment == 'self-hosted'
         shell: bash

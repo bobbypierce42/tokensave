@@ -36,6 +36,12 @@ jobs:
             runner: windows-latest
 
     steps:
+      - name: Prepare a private home for the Mac job
+        if: runner.os == 'macOS' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          mkdir -p "$RUNNER_TEMP/ci-home"
+          echo "HOME=$RUNNER_TEMP/ci-home" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
 
       # The Linux runner ships with ~10 GB free, which our 713 MB cache restore
