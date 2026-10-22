@@ -21,7 +21,9 @@ env:
 jobs:
   test:
     name: Test ${{ matrix.name }}
-    runs-on: ${{ matrix.runner == 'ubuntu-latest' && 'kalana-ci' || matrix.runner == 'macos-14' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'macos-26' || 'kalana-macos-ci') || matrix.runner }}
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ${{ startsWith(matrix.runner, 'windows') && matrix.runner || startsWith(matrix.runner, 'macos') && fromJSON('["self-hosted","kalana-macos-ci","macOS"]') || fromJSON('["self-hosted","kalana-ci","Linux"]') }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -34,12 +36,6 @@ jobs:
             runner: windows-latest
 
     steps:
-      - name: Prepare a private home for the Mac job
-        if: runner.os == 'macOS' && runner.environment == 'self-hosted'
-        shell: bash
-        run: |-
-          mkdir -p "$RUNNER_TEMP/ci-home"
-          echo "HOME=$RUNNER_TEMP/ci-home" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
 
       # The Linux runner ships with ~10 GB free, which our 713 MB cache restore
@@ -74,8 +70,9 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: kalana-ci
-    continue-on-error: true
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: [self-hosted, kalana-ci, Linux]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.98.1
@@ -87,7 +84,9 @@ jobs:
 
   msrv:
     name: MSRV
-    runs-on: kalana-ci
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: [self-hosted, kalana-ci, Linux]
+    timeout-minutes: 30
     env:
       RUSTUP_TOOLCHAIN: "1.95.0"
     steps:
@@ -98,7 +97,9 @@ jobs:
 
   fmt:
     name: Format
-    runs-on: kalana-ci
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: [self-hosted, kalana-ci, Linux]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.98.1
@@ -106,3 +107,36 @@ jobs:
           profile: minimal
           components: rustfmt
       - run: cargo fmt --all -- --check
+  feature-tiers:
+    name: Compile ${{ matrix.features }} feature tier
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: [self-hosted, kalana-ci, Linux]
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        features: [lite, medium]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.98.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: features-${{ matrix.features }}
+      - name: Compile supported feature tier
+        run: cargo check --workspace --locked --no-default-features --features "${{ matrix.features }}"
+  release-build:
+    name: Release build and package
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: [self-hosted, kalana-ci, Linux]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.98.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-build
+      - run: cargo build --workspace --release --locked
+      - name: Check CLI starts
+        run: target/release/tokensave --help
+      - name: Validate crate packaging
+        run: cargo package --no-verify
