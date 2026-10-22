@@ -21,7 +21,7 @@ env:
 jobs:
   test:
     name: Test ${{ matrix.name }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner == 'ubuntu-latest' && 'kalana-ci' || matrix.runner == 'macos-14' && 'kalana-macos-ci' || matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
@@ -34,13 +34,19 @@ jobs:
             runner: windows-latest
 
     steps:
+      - name: Prepare a private home for the Mac job
+        if: runner.os == 'macOS' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          mkdir -p "$RUNNER_TEMP/ci-home"
+          echo "HOME=$RUNNER_TEMP/ci-home" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
 
       # The Linux runner ships with ~10 GB free, which our 713 MB cache restore
       # plus the cargo target dir (34 tree-sitter parsers compiled in) can
       # exceed. See v4.5.1 CI flake: "No space left on device" mid-test.
       - name: Free disk space (Linux only)
-        if: matrix.name == 'Linux'
+        if: matrix.name == 'Linux' && runner.environment == 'github-hosted'
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
           tool-cache: false
@@ -68,7 +74,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: kalana-ci
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
@@ -81,7 +87,7 @@ jobs:
 
   msrv:
     name: MSRV
-    runs-on: ubuntu-latest
+    runs-on: kalana-ci
     env:
       RUSTUP_TOOLCHAIN: "1.95.0"
     steps:
@@ -92,7 +98,7 @@ jobs:
 
   fmt:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: kalana-ci
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.98.1

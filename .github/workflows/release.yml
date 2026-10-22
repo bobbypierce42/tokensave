@@ -27,7 +27,7 @@ jobs:
   setup:
     name: Resolve target tag
     if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
-    runs-on: ubuntu-latest
+    runs-on: kalana-ci
     outputs:
       # The tag every downstream job builds and uploads against. On a release event this is
       # the released tag; on a dispatch it is the `tag` input. GITHUB_REF_NAME is the branch
@@ -39,6 +39,12 @@ jobs:
       # and crates.io, all of which already succeeded on the original release run.
       windows_only: ${{ steps.resolve.outputs.windows_only }}
     steps:
+      - name: Install runner command-line dependencies
+        if: runner.os == 'Linux' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gh
       - name: Resolve tag and mode
         id: resolve
         env:
@@ -64,7 +70,7 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     needs: setup
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner == 'macos-14' && 'kalana-macos-ci' || matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
@@ -93,6 +99,27 @@ jobs:
             archive: zip
 
     steps:
+      - name: Limit self-hosted compilation parallelism
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          echo "CARGO_BUILD_JOBS=2" >> "$GITHUB_ENV"
+          echo "RUST_TEST_THREADS=2" >> "$GITHUB_ENV"
+          if [ "$RUNNER_OS" = macOS ]; then echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "$GITHUB_ENV"; fi
+      - name: Prepare a private home for the Mac job
+        if: runner.os == 'macOS' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          mkdir -p "$RUNNER_TEMP/ci-home"
+          echo "HOME=$RUNNER_TEMP/ci-home" >> "$GITHUB_ENV"
+      - name: Install GitHub CLI in the Mac job directory
+        if: runner.os == 'macOS' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          curl -fsSL --retry 3 https://github.com/cli/cli/releases/download/v2.103.0/gh_2.103.0_macOS_arm64.zip -o "$RUNNER_TEMP/gh.zip"
+          echo "54be566e9f614bea5de8021e95b9ad33dfee3b9d2ea120c9c294c00defaa5014  $RUNNER_TEMP/gh.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/gh.zip" -d "$RUNNER_TEMP/gh-cli"
+          echo "$RUNNER_TEMP/gh-cli/gh_2.103.0_macOS_arm64/bin" >> "$GITHUB_PATH"
       - uses: actions/checkout@v5
         with:
           ref: ${{ needs.setup.outputs.tag }}
@@ -209,7 +236,7 @@ jobs:
     name: Sign Windows binary (${{ matrix.name }})
     if: always() && needs.setup.result == 'success' && needs.setup.outputs.publish == 'true'
     needs: [setup, build]
-    runs-on: ubuntu-latest
+    runs-on: kalana-ci
     permissions:
       contents: write   # upload the signed zip to the release
       actions: read     # let the SignPath action read the unsigned artifact
@@ -220,6 +247,12 @@ jobs:
       matrix:
         name: [x86_64-windows, aarch64-windows]
     steps:
+      - name: Install runner command-line dependencies
+        if: runner.os == 'Linux' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gh
       - name: Download unsigned artifact id
         uses: actions/download-artifact@v7
         with:
@@ -287,8 +320,14 @@ jobs:
     name: Publish SHA256SUMS
     if: always() && needs.setup.outputs.publish == 'true' && needs.sign-windows.result == 'success'
     needs: [setup, build, sign-windows]
-    runs-on: ubuntu-latest
+    runs-on: kalana-ci
     steps:
+      - name: Install runner command-line dependencies
+        if: runner.os == 'Linux' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gh
       - name: Download checksum artifacts
         uses: actions/download-artifact@v7
         with:
@@ -342,8 +381,20 @@ jobs:
       github.event_name == 'release' && !github.event.release.prerelease
       && !cancelled() && needs.build.result == 'success'
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: kalana-ci
     steps:
+      - name: Limit self-hosted compilation parallelism
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          echo "CARGO_BUILD_JOBS=2" >> "$GITHUB_ENV"
+          echo "RUST_TEST_THREADS=2" >> "$GITHUB_ENV"
+      - name: Install runner command-line dependencies
+        if: runner.os == 'Linux' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gh
       - uses: actions/checkout@v5
 
       - name: Get version
@@ -432,8 +483,14 @@ jobs:
     name: Publish to crates.io
     if: github.event_name == 'release' && !github.event.release.prerelease
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: kalana-ci
     steps:
+      - name: Limit self-hosted compilation parallelism
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          echo "CARGO_BUILD_JOBS=2" >> "$GITHUB_ENV"
+          echo "RUST_TEST_THREADS=2" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
@@ -448,8 +505,14 @@ jobs:
     if: always() && needs.sign-windows.result == 'success'
     # Depends on sign-windows: it downloads the signed Windows zip from the release to hash it.
     needs: [setup, sign-windows]
-    runs-on: ubuntu-latest
+    runs-on: kalana-ci
     steps:
+      - name: Install runner command-line dependencies
+        if: runner.os == 'Linux' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |-
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gh
       - name: Get release info
         id: release
         env:

@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   star-history:
-    runs-on: ubuntu-latest
+    runs-on: kalana-ci
     steps:
       - uses: actions/checkout@v4
       - uses: narayann7/star-history-action@29310fc87122228fe128d811f14027be3ca99601 # v1.0.3
