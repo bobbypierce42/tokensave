@@ -12,6 +12,15 @@ and smoke-test the optimized CLI before validating crate packaging. Rust builds
 use the committed Cargo.lock. Packaging intentionally resolves the registry form
 of git dependencies, matching cargo publish's manifest rewrite.
 
+The Linux test job compiles one target at a time, disables incremental builds,
+and omits development/test debug information to reduce peak compilation and
+artifact pressure on the runner. The full default-feature workspace test
+command, debug assertions, test-thread limit, and other platform jobs remain
+unchanged. Cgroup memory counters and disk capacity are recorded before and
+after the tests. Two earlier Linux workers lost the full-feature compiler to
+SIGKILL and then received a shutdown signal; those logs do not establish an
+out-of-memory cause, so the resource readings make future diagnosis explicit.
+
 Linux release binaries for both x64 and ARM64 are cross-compiled with pinned Zig
 and cargo-zigbuild, preserving the previous Ubuntu 22.04/glibc 2.35 release floor
 without requiring a second native Linux architecture runner. macOS and Windows

@@ -58,6 +58,29 @@ jobs:
           large-packages: false
           swap-storage: false
 
+      - name: Bound Linux test compilation resources
+        if: matrix.name == 'Linux'
+        shell: bash
+        run: |
+          # The full-feature library and its test harness are both large.
+          # Compile one target at a time without debug artifacts; retain the
+          # complete default-feature workspace tests and debug assertions.
+          {
+            echo 'CARGO_BUILD_JOBS=1'
+            echo 'CARGO_INCREMENTAL=0'
+            echo 'CARGO_PROFILE_DEV_DEBUG=0'
+            echo 'CARGO_PROFILE_TEST_DEBUG=0'
+          } >> "$GITHUB_ENV"
+          for resource in /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.current \
+            /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.events \
+            /sys/fs/cgroup/memory/memory.limit_in_bytes; do
+            if [ -r "$resource" ]; then
+              printf '\n%s\n' "$resource"
+              cat "$resource"
+            fi
+          done
+          df -h . "$RUNNER_TEMP"
+
       - uses: dtolnay/rust-toolchain@1.98.1
         with:
           profile: minimal
@@ -73,6 +96,20 @@ jobs:
           # default overflows async-heavy tests with STATUS_ACCESS_VIOLATION.
           RUST_MIN_STACK: "8388608"
         run: cargo test --workspace --locked
+
+      - name: Report Linux test resource usage
+        if: always() && matrix.name == 'Linux'
+        shell: bash
+        run: |
+          for resource in /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.current \
+            /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.events \
+            /sys/fs/cgroup/memory/memory.max_usage_in_bytes; do
+            if [ -r "$resource" ]; then
+              printf '\n%s\n' "$resource"
+              cat "$resource"
+            fi
+          done
+          df -h . "$RUNNER_TEMP"
 
   clippy:
     name: Clippy
