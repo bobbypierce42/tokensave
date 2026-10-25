@@ -125,8 +125,8 @@ jobs:
         if: runner.environment == 'self-hosted'
         shell: bash
         run: |-
-          echo "CARGO_BUILD_JOBS=2" >> "$GITHUB_ENV"
-          echo "RUST_TEST_THREADS=2" >> "$GITHUB_ENV"
+          echo "CARGO_BUILD_JOBS=${{ runner.os == 'Linux' && '1' || '2' }}" >> "$GITHUB_ENV"
+          echo "RUST_TEST_THREADS=${{ runner.os == 'Linux' && '1' || '2' }}" >> "$GITHUB_ENV"
           if [ "$RUNNER_OS" = macOS ]; then echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "$GITHUB_ENV"; fi
       - name: Prepare a private home for the Mac job
         if: runner.os == 'macOS' && runner.environment == 'self-hosted'
@@ -464,8 +464,8 @@ jobs:
         if: runner.environment == 'self-hosted'
         shell: bash
         run: |-
-          echo "CARGO_BUILD_JOBS=2" >> "$GITHUB_ENV"
-          echo "RUST_TEST_THREADS=2" >> "$GITHUB_ENV"
+          echo "CARGO_BUILD_JOBS=1" >> "$GITHUB_ENV"
+          echo "RUST_TEST_THREADS=1" >> "$GITHUB_ENV"
       - name: Set up GitHub CLI without root privileges
         if: runner.os == 'Linux' && runner.environment == 'self-hosted'
         shell: bash
@@ -584,8 +584,8 @@ jobs:
         if: runner.environment == 'self-hosted'
         shell: bash
         run: |-
-          echo "CARGO_BUILD_JOBS=2" >> "$GITHUB_ENV"
-          echo "RUST_TEST_THREADS=2" >> "$GITHUB_ENV"
+          echo "CARGO_BUILD_JOBS=1" >> "$GITHUB_ENV"
+          echo "RUST_TEST_THREADS=1" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
